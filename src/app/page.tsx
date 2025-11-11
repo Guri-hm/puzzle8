@@ -23,15 +23,15 @@ function getDifficulty(size: number): string {
 // puzzleId命名規則: 先頭の数字がグリッドサイズ（3=3x3, 4=4x4, 5=5x5）
 const PUZZLE_SETS = [
   { 
-    id: '3001',  // 3x3の1番目
-    name: 'かんたんパズル', 
-    description: '初心者向けの3×3パズル',
+    id: '0001',  // 3x3（旧命名規則）
+    name: 'デモ用パズル', 
+    description: 'デモ用の3×3パズル',
     bestTime: null as number | null
   },
   { 
-    id: '0001',  // 3x3（旧命名規則）
-    name: 'クラシックパズル', 
-    description: 'デモ用の3×3パズル',
+    id: '3001',  // 3x3の1番目
+    name: 'かんたんパズル', 
+    description: '初心者向けの3×3パズル',
     bestTime: null as number | null
   },
   { 
