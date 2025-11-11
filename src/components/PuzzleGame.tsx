@@ -70,7 +70,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
   const neighbors = useMemo(() => generateNeighbors(size), [size])
 
   // 初期シャッフル済み状態を生成
-  const generateInitialState = () => {
+  const generateInitialState = useCallback(() => {
     let current = Array.from({ length: size * size }, (_, i) => i + 1)
     current[size * size - 1] = EMPTY
     let emptyIdx = current.indexOf(EMPTY)
@@ -85,17 +85,16 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
     }
 
     return { state: current, emptyPos: emptyIdx }
-  }
+  }, [EMPTY, neighbors, size])
 
-  const [state, setState] = useState<number[]>(() => generateInitialState().state)
-  const [initialState, setInitialState] = useState<number[]>(() => {
-    const init = generateInitialState()
-    return init.state
-  })
-  const [emptyPos, setEmptyPos] = useState(() => {
-    const init = generateInitialState()
-    return init.emptyPos
-  })
+  // 完成状態から開始（hydration対策）
+  const [state, setState] = useState<number[]>(() => 
+    Array.from({ length: size * size }, (_, i) => i + 1)
+  )
+  const [initialState, setInitialState] = useState<number[]>(() => 
+    Array.from({ length: size * size }, (_, i) => i + 1)
+  )
+  const [emptyPos, setEmptyPos] = useState(() => EMPTY)
   const [moves, setMoves] = useState(0)
   const [hints, setHints] = useState(0)
   const [startTime, setStartTime] = useState<number | null>(null)
@@ -108,6 +107,14 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
   const [draggedTile, setDraggedTile] = useState<number | null>(null)
   const [animatingTiles, setAnimatingTiles] = useState<Set<number>>(new Set())
   const hintTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // クライアントサイドでのみ初期シャッフルを実行（hydration対策）
+  useEffect(() => {
+    const initialShuffle = generateInitialState()
+    setState(initialShuffle.state)
+    setInitialState(initialShuffle.state)
+    setEmptyPos(initialShuffle.emptyPos)
+  }, [generateInitialState])
 
   // タイマー更新
   useEffect(() => {
@@ -347,7 +354,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
 
   // ヒント計算（A*アルゴリズム）- script.jsに準拠
   const getHint = () => {
-    const target = [1, 2, 3, 4, 5, 6, 7, 8, EMPTY]
+    const target = Array.from({ length: size * size }, (_, i) => i + 1)
     
     const startKey = state.join(',')
     const goalKey = target.join(',')
@@ -467,13 +474,13 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
   const showHintArrowByIndex = (fromIndex: number) => {
     const emptyIdx = state.indexOf(EMPTY)
     
-    // 位置の差分から矢印を決定（script.jsと同じロジック）
+    // 位置の差分から矢印を決定（動的サイズ対応）
     const delta = emptyIdx - fromIndex
     let direction = '→'
     if (delta === 1) direction = '→'
     else if (delta === -1) direction = '←'
-    else if (delta === 3) direction = '↓'
-    else if (delta === -3) direction = '↑'
+    else if (delta === size) direction = '↓'
+    else if (delta === -size) direction = '↑'
 
     const tileNum = state[fromIndex]
     

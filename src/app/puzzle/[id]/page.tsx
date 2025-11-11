@@ -4,7 +4,7 @@ import { Metadata } from 'next'
 const BASE_PATH = process.env.NODE_ENV === 'production' ? '/puzzle' : ''
 
 // 利用可能なパズルID一覧
-const PUZZLE_IDS = ['0001', '0002', '3001']
+const PUZZLE_IDS = ['0001', '4002', '3001']
 
 // パズルIDからサイズを取得
 function getPuzzleSize(puzzleId: string): number {

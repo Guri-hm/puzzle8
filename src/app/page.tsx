@@ -24,20 +24,20 @@ function getDifficulty(size: number): string {
 const PUZZLE_SETS = [
   { 
     id: '3001',  // 3x3の1番目
-    name: 'サンプルパズル', 
-    description: 'デモ用の9マスパズル',
+    name: 'かんたんパズル', 
+    description: '初心者向けの3×3パズル',
     bestTime: null as number | null
   },
   { 
-    id: '0001',  // 3x3の1番目
-    name: 'サンプルパズル', 
-    description: 'デモ用の9マスパズル',
+    id: '0001',  // 3x3（旧命名規則）
+    name: 'クラシックパズル', 
+    description: 'デモ用の3×3パズル',
     bestTime: null as number | null
   },
   { 
-    id: '0002',  // 3x3の1番目
-    name: 'サンプルパズル', 
-    description: 'デモ用の9マスパズル',
+    id: '4002',  // 4x4の2番目
+    name: 'チャレンジパズル', 
+    description: '中級者向けの4×4パズル',
     bestTime: null as number | null
   },
 ]
