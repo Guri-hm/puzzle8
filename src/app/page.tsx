@@ -41,6 +41,12 @@ const generatePuzzleSets = () => {
       description: '中級者向けの4×4パズル',
       bestTime: null as number | null
     },
+    { 
+      id: '5001',  // 5x5の1番目
+      name: 'チャレンジパズル', 
+      description: '上級者向けの5×5パズル',
+      bestTime: null as number | null
+    },
   ]
 
   // デモ用に同じパズルを複製（実際の画像は0001を使用）
