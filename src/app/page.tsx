@@ -124,7 +124,7 @@ function PuzzlePreview({ puzzleId, size, isVisible }: { puzzleId: string; size: 
 
 export default function Home() {
   const [selectedPuzzle, setSelectedPuzzle] = useState(0)
-  const [visiblePuzzles, setVisiblePuzzles] = useState(6) // 初期表示数
+  const [visiblePuzzles, setVisiblePuzzles] = useState(3) // 初期表示数
   const loadMoreRef = useRef<HTMLDivElement>(null)
 
   // Intersection Observer for infinite scroll
