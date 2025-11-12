@@ -1,18 +1,33 @@
-# 9マスパズル
+# Puzzle8
 
-Next.js で作成された画像パズルゲームです。画像を正しい順序に並べ替えることでクリアできます。
+Next.jsで作成したスライディングパズルゲームです。タイルをスライドさせて画像を完成させるクラシックなパズルゲームを、モダンなWebアプリケーションとして実装しています。
 
-## 機能
+## デモ
 
-- ⏱️ タイマー機能
-- 🚶 手数カウント
-- 💡 ヒント機能（A*アルゴリズム）
-- 🏆 ローカルストレージでベストタイム記録
-- 🎉 クリア時のアニメーション
-- 📱 レスポンシブデザイン
-- 🔗 OGP対応
+https://puzzle8.solopg.com/
 
-## セットアップ
+## 主な機能
+
+- タイマー機能（M:SS形式）
+- 手数・ヒント回数のカウント
+- A*アルゴリズムによる最適解ヒント
+- ローカルストレージでのリーダーボード管理
+- レスポンシブデザイン（モバイル・デスクトップ対応）
+- タッチ操作・ドラッグ操作対応
+- 複数難易度のパズル（3×3から5×5まで）
+- シークレットモード（画像非表示でプレイ）
+- WebP画像による最適化
+
+## 技術スタック
+
+- Next.js 14+ (App Router)
+- React 18+
+- TypeScript
+- Tailwind CSS
+- GitHub Actions (CI/CD)
+- GitHub Pages (デプロイ先)
+
+## 開発
 
 ```bash
 # 依存関係のインストール
@@ -23,29 +38,44 @@ npm run dev
 
 # 本番ビルド
 npm run build
+
+# 静的エクスポート
+npm run export
 ```
 
-## 新しいパズルの追加方法
+## パズル追加方法
 
-1. `public/puzzles/` に新しいフォルダを作成（例：`0002`）
-2. フォルダ内に `tile_1.png` から `tile_9.png` までの画像を配置
-   - 画像は3×3グリッドの各タイルに対応
-   - 推奨サイズ：正方形（例：300x300px）
-3. `src/app/page.tsx` の `PUZZLE_SETS` 配列に新しいパズルを追加
+1. `public/puzzles/` に新しいフォルダを作成（例：`3004`）
+   - フォルダ名の先頭数字がパズルサイズを示します（3=3×3, 4=4×4, 5=5×5）
+2. 512×512pxのPNG画像を9枚（3×3の場合）配置
+   - `tile_1.png` から `tile_9.png`（左上から右下へ、1から順に）
+3. `src/data/puzzles.ts` の `PUZZLE_DATA` 配列に追加
 
 ```typescript
-const PUZZLE_SETS = [
-  { id: '0001', name: 'サンプルパズル1', description: '最初のパズル' },
-  { id: '0002', name: '新しいパズル', description: '説明文' },
-]
+{
+  id: '3004',
+  name: 'パズル名',
+  description: '説明文',
+  isAvailable: true,
+  isHidden: false,
+  isSecret: false,
+  bestTime: null
+}
 ```
 
-4. Git にコミット＆プッシュで自動デプロイ
+4. `npm run convert-images` で自動的にWebP変換
+5. Gitにコミット・プッシュで自動デプロイ
 
 ## デプロイ
 
-GitHub Actions により、`main` ブランチへのプッシュで自動的に GitHub Pages にデプロイされます。
+`main`ブランチへのプッシュで、GitHub Actionsが自動的にビルド・デプロイを実行します。
+
+詳細は `DEPLOY.md` を参照してください。
 
 ## ライセンス
 
-MIT
+MIT License
+
+## 作者
+
+Guri-hm

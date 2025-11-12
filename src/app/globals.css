@@ -261,3 +261,44 @@ body {
   from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
+
+/* Shuffle Animation - タイルが直線的に移動しながら軽く浮かび上がる演出 */
+@keyframes shuffle-fly {
+  0% {
+    transform: translate(var(--from-x, 0), var(--from-y, 0)) translateZ(0) scale(1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    opacity: 1;
+  }
+  15% {
+    /* 軽く浮かび上がる */
+    transform: translate(calc(var(--from-x, 0) * 0.85), calc(var(--from-y, 0) * 0.85)) translateZ(30px) scale(1.03);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+    opacity: 1;
+  }
+  85% {
+    /* 直線的に移動しながら浮遊 */
+    transform: translate(calc(var(--from-x, 0) * 0.15), calc(var(--from-y, 0) * 0.15)) translateZ(30px) scale(1.03);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+    opacity: 1;
+  }
+  100% {
+    /* 着地 */
+    transform: translate(0, 0) translateZ(0) scale(1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 1;
+  }
+}
+
+.puzzle-tile.shuffle-animating {
+  animation: shuffle-fly 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  transform-style: preserve-3d;
+  backface-visibility: visible;
+  z-index: 1000;
+}
+
+/* パズルグリッドに3D空間を設定 */
+.puzzle-grid-play {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+

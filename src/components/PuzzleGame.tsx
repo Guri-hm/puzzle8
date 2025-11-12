@@ -110,6 +110,8 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
   const [showSample, setShowSample] = useState(false) // 見本ボードの表示状態（モバイル用）
   const [draggingTile, setDraggingTile] = useState<{ tileNum: number; x: number; y: number } | null>(null) // ドラッグ中のタイル位置
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; tileNum: number; direction: 'horizontal' | 'vertical' | null } | null>(null) // タッチ開始位置と許可方向
+  const [isShuffling, setIsShuffling] = useState(false) // シャッフル中フラグ
+  const [shuffleAnimations, setShuffleAnimations] = useState<Map<number, { fromRow: number; fromCol: number; toRow: number; toCol: number }>>(new Map()) // シャッフルアニメーション情報
   const hintTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 初期状態は完成画像のまま（シャッフルしない）
@@ -191,42 +193,90 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
   //   return countInversions(arr) % 2 === 0
   // }
 
-  // シャッフル実行（内部関数）
-  const performShuffle = () => {
+  // シャッフル実行（内部関数・結果を一斉にアニメーション）
+  const performShuffle = async () => {
+    setIsShuffling(true)
+    
+    // シャッフル前の状態を保存
+    const beforeState = Array.from({ length: size * size }, (_, i) => i + 1)
+    
     let current = Array.from({ length: size * size }, (_, i) => i + 1)
     current[size * size - 1] = EMPTY
-    let emptyIdx = current.indexOf(EMPTY) // 0-indexed位置
+    let emptyIdx = current.indexOf(EMPTY)
 
-    // ランダムに200回移動してシャッフル
-    // 有効な移動のみを行うため、転倒数の偶奇が変わらず、必ず解ける
+    // シャッフルを一気に実行（演出なし）
     for (let i = 0; i < 200; i++) {
       const moveOptions = neighbors[emptyIdx] || []
       const randomIdx = moveOptions[Math.floor(Math.random() * moveOptions.length)]
       
-      // タイルを交換
       const temp = current[emptyIdx]
       current[emptyIdx] = current[randomIdx]
       current[randomIdx] = temp
       emptyIdx = randomIdx
     }
 
-    setState(current)
-    setInitialState([...current])
+    // シャッフル後の状態
+    const afterState = [...current]
+    
+    // 各タイルの移動情報を計算
+    const animations = new Map<number, { fromRow: number; fromCol: number; toRow: number; toCol: number }>()
+    
+    for (let i = 0; i < afterState.length; i++) {
+      const tileNum = afterState[i]
+      if (tileNum === EMPTY) continue
+      
+      // このタイルがシャッフル前にどこにあったか
+      const beforeIdx = beforeState.indexOf(tileNum)
+      const afterIdx = i
+      
+      // 位置が変わったタイルのみアニメーション
+      if (beforeIdx !== afterIdx) {
+        const fromRow = Math.floor(beforeIdx / size)
+        const fromCol = beforeIdx % size
+        const toRow = Math.floor(afterIdx / size)
+        const toCol = afterIdx % size
+        
+        animations.set(tileNum, { fromRow, fromCol, toRow, toCol })
+      }
+    }
+    
+    // アニメーション情報を設定
+    setShuffleAnimations(animations)
+    setAnimatingTiles(new Set(animations.keys()))
+    
+    // 状態を更新（シャッフル後の状態にする）
+    setState(afterState)
     setEmptyPos(emptyIdx)
+    setInitialState([...afterState])
+    
+    // アニメーション時間を待つ（0.5秒）
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    // アニメーション情報をクリア
+    setShuffleAnimations(new Map())
+    setAnimatingTiles(new Set())
+    setIsShuffling(false)
   }
 
   // シャッフルボタン（開始も兼ねる）
-  const shuffle = useCallback(() => {
-    performShuffle()
+  const shuffle = useCallback(async () => {
+    if (isShuffling) return
+    
     setMoves(0)
     setHints(0)
-    setStartTime(Date.now())
     setElapsedTime(0)
-    setIsStarted(true)
-    setHasStartedOnce(true) // 一度でも開始したフラグを立てる
     setHintArrow(null)
     setIsWon(false)
-  }, [])
+    setIsStarted(true)
+    setHasStartedOnce(true)
+    setStartTime(null) // タイマーをリセット
+    
+    // シャッフルアニメーションを実行
+    await performShuffle()
+    
+    // アニメーション完了後にタイマー開始（操作可能になってから）
+    setStartTime(Date.now())
+  }, [neighbors, size, isShuffling])
 
   // 位置リセットボタン（配置のみ初期状態に戻す。タイマー・手数・ヒントは継続）
   const handleRestart = () => {
@@ -267,7 +317,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
 
   // タイルクリック（タイル自体をクリックして空マスに移動）
   const handleTileClickDirect = (tileNum: number) => {
-    if (isWon || tileNum === EMPTY || !isStarted || animatingTiles.size > 0) return
+    if (isWon || tileNum === EMPTY || !isStarted || animatingTiles.size > 0 || isShuffling) return
 
     // タイルの位置を取得
     const tileIdx = state.indexOf(tileNum)
@@ -296,7 +346,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
 
   // ドラッグ開始
   const handleDragStart = (e: React.DragEvent, tileNum: number) => {
-    if (isWon || tileNum === EMPTY || !isStarted) {
+    if (isWon || tileNum === EMPTY || !isStarted || isShuffling) {
       e.preventDefault()
       return
     }
@@ -351,7 +401,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
 
   // タッチ開始
   const handleTouchStart = (e: React.TouchEvent, tileNum: number) => {
-    if (isWon || tileNum === EMPTY || !isStarted || animatingTiles.size > 0) return
+    if (isWon || tileNum === EMPTY || !isStarted || animatingTiles.size > 0 || isShuffling) return
     
     const touch = e.touches[0]
     
@@ -389,18 +439,64 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     const deltaX = touch.clientX - touchStart.x
     const deltaY = touch.clientY - touchStart.y
     
-    // 移動可能な方向のみに制限
+    // タイルと空マスの位置情報を取得
+    const tileIdx = state.indexOf(touchStart.tileNum)
+    const emptyIdx = state.indexOf(EMPTY)
+    
+    const tileRow = Math.floor(tileIdx / size)
+    const tileCol = tileIdx % size
+    const emptyRow = Math.floor(emptyIdx / size)
+    const emptyCol = emptyIdx % size
+    
+    // 移動可能な方向のみに制限し、ボード内に収める（緩やかな制限）
     let constrainedX = 0
     let constrainedY = 0
     
     if (touchStart.direction === 'horizontal') {
       // 横方向のみ許可
-      constrainedX = deltaX
+      const maxDistance = Math.abs(emptyCol - tileCol) // タイル何個分離れているか
+      
+      // グリッド全体の幅を取得（親要素から）
+      const gridElement = (e.target as HTMLElement).closest('.puzzle-grid-play')
+      if (gridElement) {
+        const gridWidth = gridElement.getBoundingClientRect().width
+        const tileWidth = gridWidth / size
+        const maxPixels = maxDistance * tileWidth
+        
+        // 空マスの方向に応じて制限
+        if (emptyCol > tileCol) {
+          // 右に空マスがある → 右方向のみ許可
+          constrainedX = Math.max(0, Math.min(deltaX, maxPixels))
+        } else {
+          // 左に空マスがある → 左方向のみ許可
+          constrainedX = Math.min(0, Math.max(deltaX, -maxPixels))
+        }
+      } else {
+        constrainedX = deltaX // フォールバック
+      }
       constrainedY = 0
     } else if (touchStart.direction === 'vertical') {
       // 縦方向のみ許可
+      const maxDistance = Math.abs(emptyRow - tileRow)
+      
+      const gridElement = (e.target as HTMLElement).closest('.puzzle-grid-play')
+      if (gridElement) {
+        const gridHeight = gridElement.getBoundingClientRect().height
+        const tileHeight = gridHeight / size
+        const maxPixels = maxDistance * tileHeight
+        
+        // 空マスの方向に応じて制限
+        if (emptyRow > tileRow) {
+          // 下に空マスがある → 下方向のみ許可
+          constrainedY = Math.max(0, Math.min(deltaY, maxPixels))
+        } else {
+          // 上に空マスがある → 上方向のみ許可
+          constrainedY = Math.min(0, Math.max(deltaY, -maxPixels))
+        }
+      } else {
+        constrainedY = deltaY // フォールバック
+      }
       constrainedX = 0
-      constrainedY = deltaY
     } else {
       // 移動不可の場合は何もしない
       return
@@ -665,20 +761,28 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
           <div className="flex justify-center gap-2 sm:gap-4 flex-wrap px-2">
             <button
               onClick={shuffle}
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition text-sm sm:text-base"
+              disabled={isShuffling}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {hasStartedOnce ? 'シャッフル' : 'シャッフルして開始'}
+              {isShuffling ? (
+                <>
+                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                  <span>シャッフル中...</span>
+                </>
+              ) : (
+                <span>{hasStartedOnce ? 'シャッフル' : 'シャッフルして開始'}</span>
+              )}
             </button>
             <button
               onClick={handleRestart}
-              disabled={!isStarted}
+              disabled={!isStarted || isShuffling}
               className="bg-orange-600 hover:bg-orange-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               位置リセット
             </button>
             <button
               onClick={getHint}
-              disabled={isWon || !isStarted}
+              disabled={isWon || !isStarted || isShuffling}
               className="bg-green-600 hover:bg-green-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               ヒント
@@ -687,7 +791,8 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
             {!isSecret && (
               <button
                 onClick={() => setShowSample(true)}
-                className="lg:hidden bg-purple-600 hover:bg-purple-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition text-sm sm:text-base"
+                disabled={isShuffling}
+                className="lg:hidden bg-purple-600 hover:bg-purple-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 見本を表示
               </button>
@@ -765,19 +870,39 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
                 const col = (idx % size) + 1
                 const isDragging = draggingTile?.tileNum === tileNum
                 
+                // シャッフルアニメーション情報を取得
+                const shuffleAnim = shuffleAnimations.get(tileNum)
+                const isShuffleAnimating = shuffleAnim !== undefined
+                
+                // シャッフルアニメーション用のスタイル計算
+                let animationStyle: React.CSSProperties = {}
+                if (isShuffleAnimating && shuffleAnim) {
+                  // 元の位置（fromRow, fromCol）から現在の位置（toRow, toCol）への移動
+                  // CSS変数で移動距離を指定
+                  const deltaRow = shuffleAnim.toRow - shuffleAnim.fromRow
+                  const deltaCol = shuffleAnim.toCol - shuffleAnim.fromCol
+                  
+                  // CSS変数として移動距離を設定（タイル1つ分 = 100%）
+                  animationStyle = {
+                    '--from-x': `${-deltaCol * 100}%`,
+                    '--from-y': `${-deltaRow * 100}%`,
+                  } as React.CSSProperties
+                }
+                
                 return (
                   <div
                     key={tileNum}
                     className={`puzzle-tile ${tileNum === EMPTY && isStarted ? 'empty' : ''} ${
                       !isStarted && tileNum !== EMPTY ? 'puzzle-tile-complete' : ''
-                    } ${isDragging ? 'dragging' : ''}`}
+                    } ${isDragging ? 'dragging' : ''} ${isShuffleAnimating ? 'shuffle-animating' : ''}`}
                     style={{
                       gridArea: `${row} / ${col} / ${row + 1} / ${col + 1}`,
                       transform: isDragging ? `translate(${draggingTile.x}px, ${draggingTile.y}px)` : undefined,
-                      zIndex: isDragging ? 1000 : undefined,
+                      zIndex: isDragging ? 1000 : isShuffleAnimating ? 1000 : undefined,
+                      ...animationStyle,
                     }}
                     onClick={() => handleTileClickDirect(tileNum)}
-                    draggable={tileNum !== EMPTY && isStarted && !isWon}
+                    draggable={tileNum !== EMPTY && isStarted && !isWon && !isShuffling}
                     onDragStart={(e) => handleDragStart(e, tileNum)}
                     onDragOver={(e) => handleDragOver(e, tileNum)}
                     onDrop={(e) => handleDrop(e, tileNum)}
