@@ -1,7 +1,9 @@
 import PuzzleGame from '@/components/PuzzleGame'
 import { Metadata } from 'next'
 
-const BASE_PATH = process.env.NODE_ENV === 'production' ? '/puzzle' : ''
+// カスタムドメイン使用時は BASE_PATH 不要
+// GitHub Pages サブディレクトリ使用時は '/puzzle' を設定
+const BASE_PATH = ''
 
 // 利用可能なパズルID一覧
 const PUZZLE_IDS = ['0001', '4002', '3001']
