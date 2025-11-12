@@ -6,6 +6,7 @@ interface PuzzleGameProps {
   puzzleId: string
   imagePaths: string[]
   size: number
+  isSecret: boolean // シークレットモード
 }
 
 interface LeaderboardEntry {
@@ -65,7 +66,7 @@ function isSolvable(arr: number[], empty: number, size: number): boolean {
   }
 }
 
-export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGameProps) {
+export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: PuzzleGameProps) {
   const EMPTY = size * size
   const neighbors = useMemo(() => generateNeighbors(size), [size])
 
@@ -682,42 +683,63 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
             >
               ヒント
             </button>
-            {/* モバイル用：見本表示ボタン */}
-            <button
-              onClick={() => setShowSample(true)}
-              className="lg:hidden bg-purple-600 hover:bg-purple-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition text-sm sm:text-base"
-            >
-              見本を表示
-            </button>
+            {/* モバイル用：見本表示ボタン（シークレットモード時は非表示） */}
+            {!isSecret && (
+              <button
+                onClick={() => setShowSample(true)}
+                className="lg:hidden bg-purple-600 hover:bg-purple-700 px-4 py-2 sm:px-6 sm:py-2 rounded-lg font-bold transition text-sm sm:text-base"
+              >
+                見本を表示
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4 sm:gap-8 items-center lg:items-start justify-center">
-          {/* 見本ボード - デスクトップ表示 */}
-          <div className="hidden lg:block flex-shrink-0">
-            <h2 className="text-xl font-bold mb-4 text-center">見本</h2>
-            <div className="puzzle-grid puzzle-grid-sample mx-auto" style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
-              {Array.from({ length: size * size }, (_, i) => i + 1).map((tileNum, idx) => (
-                <div
-                  key={idx}
-                  className="puzzle-tile puzzle-tile-sample"
-                >
-                  <img src={imagePaths[tileNum - 1]} alt={`Tile ${tileNum}`} />
-                  <div className="absolute top-1 left-1 bg-black bg-opacity-60 text-white text-xs px-1.5 py-0.5 rounded font-bold">
-                    {tileNum}
+          {/* 見本ボード - デスクトップ表示（シークレットモード時は非表示） */}
+          {!isSecret && (
+            <div className="hidden lg:block flex-shrink-0">
+              <h2 className="text-xl font-bold mb-4 text-center">見本</h2>
+              <div className="puzzle-grid puzzle-grid-sample mx-auto" style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
+                {Array.from({ length: size * size }, (_, i) => i + 1).map((tileNum, idx) => (
+                  <div
+                    key={idx}
+                    className="puzzle-tile puzzle-tile-sample"
+                  >
+                    <img src={imagePaths[tileNum - 1]} alt={`Tile ${tileNum}`} />
+                    <div className="absolute top-1 left-1 bg-black bg-opacity-60 text-white text-xs px-1.5 py-0.5 rounded font-bold">
+                      {tileNum}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ゲームボード */}
           <div className="flex-shrink-0 w-full lg:w-auto max-w-[95vw] lg:max-w-none">
             <h2 className="text-lg sm:text-xl font-bold mb-2 sm:mb-4 text-center">プレイ</h2>
-            <div 
-              className={`puzzle-grid puzzle-grid-play mx-auto ${!isStarted ? 'not-started' : ''}`} 
-              style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}
-            >
+            
+            {/* シークレットモード時、開始前はボード全体に1つの？を表示 */}
+            {isSecret && !isStarted ? (
+              <div 
+                className="puzzle-grid puzzle-grid-play mx-auto"
+                style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}
+              >
+                <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 flex items-center justify-center border-2 border-purple-500/30 rounded-lg"
+                     style={{ gridColumn: `1 / ${size + 1}`, gridRow: `1 / ${size + 1}` }}>
+                  <div className="text-center">
+                    <span className="material-symbols-outlined text-8xl sm:text-9xl text-purple-400 animate-pulse mb-4">help</span>
+                    <p className="text-purple-400 text-xl sm:text-2xl font-semibold">シークレットパズル</p>
+                    <p className="text-purple-300 text-sm sm:text-base mt-2">何が出るかはお楽しみ！</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className={`puzzle-grid puzzle-grid-play mx-auto ${!isStarted ? 'not-started' : ''}`} 
+                style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}
+              >
               {state.map((tileNum, idx) => {
                 const row = Math.floor(idx / size) + 1
                 const col = (idx % size) + 1
@@ -761,6 +783,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
                 )
               })}
             </div>
+            )}
           </div>
 
           {/* リーダーボード */}
@@ -798,8 +821,8 @@ export default function PuzzleGame({ puzzleId, imagePaths, size }: PuzzleGamePro
         </div>
       </div>
 
-      {/* モバイル用：見本ボードのオーバーレイ */}
-      {showSample && (
+      {/* モバイル用：見本ボードのオーバーレイ（シークレットモード時は表示しない） */}
+      {showSample && !isSecret && (
         <div 
           className="lg:hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4"
           onClick={() => setShowSample(false)}

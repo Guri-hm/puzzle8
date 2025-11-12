@@ -2,69 +2,10 @@
 
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
+import { getAvailablePuzzles, getPuzzleSize, getDifficulty, type PuzzleData } from '@/data/puzzles'
+import { getImagePath } from '@/utils/imageUtils'
 
-// パズルIDからサイズを判定する関数
-// 命名規則: [サイズ][連番] 例: 3001 = 3x3の1番目、4001 = 4x4の1番目
-function getPuzzleSize(puzzleId: string): number {
-  const firstDigit = parseInt(puzzleId[0])
-  return firstDigit >= 3 && firstDigit <= 9 ? firstDigit : 3
-}
-
-// サイズから難易度を判定
-function getDifficulty(size: number): string {
-  if (size === 3) return 'かんたん'
-  if (size === 4) return 'ふつう'
-  if (size === 5) return 'むずかしい'
-  if (size >= 6) return 'とてもむずかしい'
-  return 'かんたん'
-}
-
-// 利用可能なパズルセット（デモ用に増やす）
-// puzzleId命名規則: 先頭の数字がグリッドサイズ（3=3x3, 4=4x4, 5=5x5）
-const generatePuzzleSets = () => {
-  const basePuzzles = [
-    { 
-      id: '0001',  // 3x3（旧命名規則）
-      name: 'デモ用パズル', 
-      description: 'デモ用の3×3パズル',
-      bestTime: null as number | null
-    },
-    { 
-      id: '3001',  // 3x3の1番目
-      name: 'かんたんパズル', 
-      description: '初心者向けの3×3パズル',
-      bestTime: null as number | null
-    },
-    { 
-      id: '4002',  // 4x4の2番目
-      name: 'チャレンジパズル', 
-      description: '中級者向けの4×4パズル',
-      bestTime: null as number | null
-    },
-    { 
-      id: '5001',  // 5x5の1番目
-      name: 'チャレンジパズル', 
-      description: '上級者向けの5×5パズル',
-      bestTime: null as number | null
-    },
-  ]
-
-  // デモ用に同じパズルを複製（実際の画像は0001を使用）
-  // const demoPuzzles = []
-  // for (let i = 0; i < 20; i++) {
-  //   const basePuzzle = basePuzzles[i % basePuzzles.length]
-  //   demoPuzzles.push({
-  //     ...basePuzzle,
-  //     id: basePuzzle.id, // 実際の画像IDは変えない
-  //     displayName: `${basePuzzle.name} #${i + 1}`,
-  //     displayId: `demo-${i + 1}`
-  //   })
-  // }
-
-  return basePuzzles
-}
-
-const PUZZLE_SETS = generatePuzzleSets()
+const PUZZLE_SETS = getAvailablePuzzles()
 
 // パズル情報を取得
 function getPuzzleInfo(puzzleId: string) {
@@ -80,14 +21,14 @@ function getPuzzleInfo(puzzleId: string) {
   }
 }
 
-// モザイク効果付きプレビュー（遅延ロード対応）
-function PuzzlePreview({ puzzleId, size, isVisible }: { puzzleId: string; size: number; isVisible: boolean }) {
+// モザイク効果付きプレビュー（遅延ロード対応・シークレットモード対応）
+function PuzzlePreview({ puzzleId, size, isVisible, isSecret }: { puzzleId: string; size: number; isVisible: boolean; isSecret: boolean }) {
   const [revealedTiles, setRevealedTiles] = useState<Set<number>>(new Set())
   const [hasLoaded, setHasLoaded] = useState(false)
   const tiles = Array.from({ length: size * size }, (_, i) => i + 1)
 
   useEffect(() => {
-    if (!isVisible || hasLoaded) return
+    if (!isVisible || hasLoaded || isSecret) return
     
     setHasLoaded(true)
     // ランダムな順序でタイルを表示
@@ -97,7 +38,19 @@ function PuzzlePreview({ puzzleId, size, isVisible }: { puzzleId: string; size: 
         setRevealedTiles(prev => new Set([...prev, tile]))
       }, index * 80)
     })
-  }, [isVisible, hasLoaded])
+  }, [isVisible, hasLoaded, isSecret])
+
+  // シークレットモードの場合は？アイコンを表示（1個だけ、ボード全体に）
+  if (isSecret) {
+    return (
+      <div className="aspect-square bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-purple-500/30">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-7xl sm:text-8xl text-purple-400 animate-pulse">help</span>
+          <p className="text-purple-400 text-sm sm:text-base mt-2 font-semibold">シークレット</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!isVisible && !hasLoaded) {
     return (
@@ -117,7 +70,7 @@ function PuzzlePreview({ puzzleId, size, isVisible }: { puzzleId: string; size: 
           }`}
         >
           <img
-            src={`/puzzles/${puzzleId}/tile_${tile}.png`}
+            src={getImagePath(`/puzzles/${puzzleId}/tile_${tile}.png`)}
             alt={`Tile ${tile}`}
             className="w-full h-full object-cover"
             loading="lazy"
@@ -187,10 +140,10 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {displayedPuzzles.map((puzzle, index) => {
               const info = getPuzzleInfo(puzzle.id)
-              const displayName = (puzzle as any).displayName || puzzle.name
+              const displayName = puzzle.name
               return (
                 <div
-                  key={(puzzle as any).displayId || puzzle.id}
+                  key={puzzle.id}
                   className="transition-all duration-300 hover:scale-105"
                   onMouseEnter={() => setSelectedPuzzle(index)}
                 >
@@ -198,7 +151,7 @@ export default function Home() {
                     <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-2xl p-4 sm:p-6 hover:bg-slate-800/70 hover:border-cyan-500/50 transition-all duration-300 group h-full flex flex-col">
                       {/* プレビュー */}
                       <div className="mb-4">
-                        <PuzzlePreview puzzleId={puzzle.id} size={info.size} isVisible={index < visiblePuzzles} />
+                        <PuzzlePreview puzzleId={puzzle.id} size={info.size} isVisible={index < visiblePuzzles} isSecret={puzzle.isSecret} />
                       </div>
 
                       {/* 情報 */}
