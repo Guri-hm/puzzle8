@@ -127,10 +127,17 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
   const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown | null>(null) // スコア詳細
   const [isCalculatingScore, setIsCalculatingScore] = useState(false) // スコア計算中フラグ
   const [displayScore, setDisplayScore] = useState(0) // 表示用スコア（アニメーション用）
+  const [snackbar, setSnackbar] = useState<{ message: string; type: 'error' | 'info' | 'success' } | null>(null) // スナックバー
   const hintTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 初期状態は完成画像のまま（シャッフルしない）
   // シャッフルは「シャッフルして開始」ボタンを押した時のみ実行
+
+  // スナックバー表示用の関数
+  const showSnackbar = (message: string, type: 'error' | 'info' | 'success' = 'info') => {
+    setSnackbar({ message, type })
+    setTimeout(() => setSnackbar(null), 4000) // 4秒後に自動で消える
+  }
 
   // タイマー更新（表示用のみ、1秒ごと）
   useEffect(() => {
@@ -166,6 +173,12 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
       setTimeout(async () => {
         // 最小手数を計算（時間がかかる処理）
         const minMoves = calculateMinMoves(initialState)
+        
+        // タイムアウト時にユーザーに分かりやすく通知
+        if (minMoves === -1) {
+          console.warn('最小手数の計算に時間がかかりすぎたため、代替スコア計算を使用します。')
+          // 視覚的なフィードバックとして、スコア計算中の表示を少し遅らせる
+        }
         
         // スコアを計算
         const breakdown = calculateScore(minMoves, moves, finalTime, hints)
@@ -620,7 +633,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     setDraggingTile(null)
   }
 
-  // ヒント計算（A*アルゴリズム）- script.jsに準拠
+  // ヒント計算（A*アルゴリズム）- タイムアウト付き
   const getHint = () => {
     const target = Array.from({ length: size * size }, (_, i) => i + 1)
     
@@ -629,20 +642,44 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     
     if (startKey === goalKey) return
 
-    // マンハッタン距離のヒューリスティック関数
-    const manhattan = (s: number[]): number => {
+    const startTime = Date.now()
+    const timeoutMs = 3000 // 3秒のタイムアウト
+
+    // マンハッタン距離 + 線形競合のヒューリスティック関数
+    const heuristic = (s: number[]): number => {
       let h = 0
+      
+      // マンハッタン距離
       for (let i = 0; i < s.length; i++) {
         const v = s[i]
         if (v === EMPTY) continue
-        const goalIdx = v - 1 // タイルnは位置n-1が正解
+        const goalIdx = v - 1
         const r1 = Math.floor(i / size)
         const c1 = i % size
         const r2 = Math.floor(goalIdx / size)
         const c2 = goalIdx % size
         h += Math.abs(r1 - r2) + Math.abs(c1 - c2)
       }
-      return h
+      
+      // 線形競合（簡略版）
+      let conflicts = 0
+      for (let row = 0; row < size; row++) {
+        for (let col1 = 0; col1 < size - 1; col1++) {
+          const idx1 = row * size + col1
+          const val1 = s[idx1]
+          if (val1 === EMPTY || Math.floor((val1 - 1) / size) !== row) continue
+          
+          for (let col2 = col1 + 1; col2 < size; col2++) {
+            const idx2 = row * size + col2
+            const val2 = s[idx2]
+            if (val2 === EMPTY || Math.floor((val2 - 1) / size) !== row) continue
+            
+            if ((val1 - 1) % size > (val2 - 1) % size) conflicts += 2
+          }
+        }
+      }
+      
+      return h + conflicts
     }
 
     interface Node {
@@ -662,7 +699,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     const parent = new Map<string, ParentInfo>()
     const closed = new Set<string>()
 
-    const startH = manhattan(state)
+    const startH = heuristic(state)
     open.push({
       key: startKey,
       state: [...state],
@@ -672,10 +709,17 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     gScore.set(startKey, 0)
     parent.set(startKey, { prevKey: null, movedFrom: null })
 
-    const maxNodes = 100000
+    // サイズに応じて探索ノード数を調整
+    const maxNodes = size === 3 ? 50000 : size === 4 ? 20000 : 5000
     let explored = 0
 
     while (open.length > 0 && explored < maxNodes) {
+      // タイムアウトチェック
+      if (Date.now() - startTime > timeoutMs) {
+        console.warn('ヒント計算: タイムアウト')
+        showSnackbar('パズルが複雑すぎてヒントを計算できませんでした', 'error')
+        return
+      }
       // f値が最小のノードを選択
       let bestIdx = 0
       for (let i = 1; i < open.length; i++) {
@@ -723,7 +767,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
         if (prevG === undefined || tentativeG < prevG) {
           gScore.set(nextKey, tentativeG)
           parent.set(nextKey, { prevKey: current.key, movedFrom: nextIdx }) // 移動元の位置インデックス
-          const h = manhattan(newState)
+          const h = heuristic(newState)
           const f = tentativeG + h
 
           open.push({
@@ -737,6 +781,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     }
 
     console.warn('A* not found (explored:', explored, ')')
+    showSnackbar('ヒントを見つけられませんでした', 'error')
   }
 
   const showHintArrowByIndex = (fromIndex: number) => {
@@ -782,8 +827,8 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     return 10 * 60 * 1000 // 6×6以上は10分
   }
 
-  // 最小手数を計算（A*アルゴリズム）
-  const calculateMinMoves = (startState: number[]): number => {
+  // 最小手数を計算（A*アルゴリズム）- タイムアウト付き
+  const calculateMinMoves = (startState: number[], timeoutMs: number = 15000): number => {
     const target = Array.from({ length: size * size }, (_, i) => i + 1)
     
     const startKey = startState.join(',')
@@ -791,9 +836,13 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     
     if (startKey === goalKey) return 0
 
-    // マンハッタン距離のヒューリスティック関数
-    const manhattan = (s: number[]): number => {
+    const startTime = Date.now()
+
+    // マンハッタン距離 + 線形競合のヒューリスティック関数
+    const heuristic = (s: number[]): number => {
       let dist = 0
+      
+      // マンハッタン距離を計算
       for (let i = 0; i < s.length; i++) {
         const val = s[i]
         if (val === EMPTY) continue
@@ -804,7 +853,65 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
         const targetCol = targetIdx % size
         dist += Math.abs(currentRow - targetRow) + Math.abs(currentCol - targetCol)
       }
-      return dist
+      
+      // 線形競合を追加（同じ行/列でブロックし合うタイルにペナルティ）
+      let conflicts = 0
+      
+      // 各行をチェック
+      for (let row = 0; row < size; row++) {
+        for (let col1 = 0; col1 < size; col1++) {
+          const idx1 = row * size + col1
+          const val1 = s[idx1]
+          if (val1 === EMPTY) continue
+          const targetRow1 = Math.floor((val1 - 1) / size)
+          if (targetRow1 !== row) continue // この行が目標行でない
+          
+          for (let col2 = col1 + 1; col2 < size; col2++) {
+            const idx2 = row * size + col2
+            const val2 = s[idx2]
+            if (val2 === EMPTY) continue
+            const targetRow2 = Math.floor((val2 - 1) / size)
+            if (targetRow2 !== row) continue // この行が目標行でない
+            
+            const targetCol1 = (val1 - 1) % size
+            const targetCol2 = (val2 - 1) % size
+            
+            // val1が左、val2が右にあるが、目標位置は逆順
+            if (targetCol1 > targetCol2) {
+              conflicts += 2 // 2手分のペナルティ
+            }
+          }
+        }
+      }
+      
+      // 各列をチェック
+      for (let col = 0; col < size; col++) {
+        for (let row1 = 0; row1 < size; row1++) {
+          const idx1 = row1 * size + col
+          const val1 = s[idx1]
+          if (val1 === EMPTY) continue
+          const targetCol1 = (val1 - 1) % size
+          if (targetCol1 !== col) continue // この列が目標列でない
+          
+          for (let row2 = row1 + 1; row2 < size; row2++) {
+            const idx2 = row2 * size + col
+            const val2 = s[idx2]
+            if (val2 === EMPTY) continue
+            const targetCol2 = (val2 - 1) % size
+            if (targetCol2 !== col) continue // この列が目標列でない
+            
+            const targetRow1 = Math.floor((val1 - 1) / size)
+            const targetRow2 = Math.floor((val2 - 1) / size)
+            
+            // val1が上、val2が下にあるが、目標位置は逆順
+            if (targetRow1 > targetRow2) {
+              conflicts += 2 // 2手分のペナルティ
+            }
+          }
+        }
+      }
+      
+      return dist + conflicts
     }
 
     interface Node {
@@ -818,7 +925,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     const gScore = new Map<string, number>()
     const closed = new Set<string>()
 
-    const startH = manhattan(startState)
+    const startH = heuristic(startState)
     open.push({
       key: startKey,
       state: [...startState],
@@ -827,10 +934,17 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
     })
     gScore.set(startKey, 0)
 
-    const maxNodes = 100000
+    // サイズに応じて探索ノード数を調整（線形競合により効率UP）
+    const maxNodes = size === 3 ? 100000 : size === 4 ? 80000 : 50000
     let explored = 0
 
     while (open.length > 0 && explored < maxNodes) {
+      // タイムアウトチェック
+      if (Date.now() - startTime > timeoutMs) {
+        console.warn(`最小手数計算: タイムアウト (${timeoutMs}ms超過)`)
+        return -1 // タイムアウトを示す特別な値
+      }
+
       // f値が最小のノードを選択
       let bestIdx = 0
       for (let i = 1; i < open.length; i++) {
@@ -840,6 +954,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
       explored++
 
       if (current.key === goalKey) {
+        console.log(`最小手数計算完了: ${current.g}手 (探索: ${explored}ノード, ${Date.now() - startTime}ms)`)
         return current.g // 最小手数を返す
       }
 
@@ -861,7 +976,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
         const existingG = gScore.get(newKey)
 
         if (existingG === undefined || newG < existingG) {
-          const newH = manhattan(newState)
+          const newH = heuristic(newState)
           gScore.set(newKey, newG)
           
           const existingIdx = open.findIndex(n => n.key === newKey)
@@ -874,18 +989,27 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
       }
     }
 
-    console.warn('最小手数計算: 解が見つかりませんでした')
-    return moves // フォールバック：実際の手数を返す
+    console.warn(`最小手数計算: 解が見つかりませんでした (探索: ${explored}ノード)`)
+    return -1 // 計算失敗を示す特別な値
   }
 
   // スコアを計算
   const calculateScore = (minMoves: number, actualMoves: number, actualTime: number, hintsUsed: number): ScoreBreakdown => {
     const timeLimit = getTimeLimit(size)
     
-    // 手数スコア（70点満点）
-    // 最小手数なら70点、超過分は1手につき1点減点（最低0点）
-    const moveExcess = Math.max(0, actualMoves - minMoves)
-    const moveScore = Math.max(0, 70 - moveExcess)
+    let moveScore = 0
+    
+    if (minMoves === -1) {
+      // 最小手数が計算できない場合は、簡易的な推定スコアを使用
+      // 時間ベースで70点満点から減点
+      const estimatedPenalty = Math.floor(actualTime / 10000) // 10秒ごとに1点減点
+      moveScore = Math.max(30, 70 - estimatedPenalty) // 最低30点は保証
+    } else {
+      // 手数スコア（70点満点）
+      // 最小手数なら70点、超過分は1手につき1点減点（最低0点）
+      const moveExcess = Math.max(0, actualMoves - minMoves)
+      moveScore = Math.max(0, 70 - moveExcess)
+    }
     
     // 時間スコア（30点満点）
     // 制限時間内なら30点、超過は10秒ごとに1点減点（最低0点）
@@ -927,7 +1051,7 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
         </div>
 
         <div className="text-center mb-4 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold mb-2 sm:mb-4">8パズル</h1>
+          <h1 className="hidden text-2xl sm:text-4xl font-bold mb-2 sm:mb-4">8パズル</h1>
           <div className="flex justify-center gap-3 sm:gap-8 text-sm sm:text-lg mb-2 sm:mb-4 flex-wrap">
             <div className="flex items-center gap-1">
               <span className="material-symbols-outlined text-base sm:text-xl">timer</span>
@@ -1223,9 +1347,21 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
                 <span className="font-bold text-green-400">+{scoreBreakdown.moveScore}点</span>
               </div>
               <div className="text-xs sm:text-sm text-gray-500 ml-4">
-                最小手数: {scoreBreakdown.minMoves}手 / 実際: {scoreBreakdown.actualMoves}手
-                {scoreBreakdown.actualMoves > scoreBreakdown.minMoves && 
-                  ` (${scoreBreakdown.actualMoves - scoreBreakdown.minMoves}手超過)`}
+                {scoreBreakdown.minMoves === -1 ? (
+                  <div className="space-y-1">
+                    <div>実際: {scoreBreakdown.actualMoves}手</div>
+                    <div className="text-yellow-500/80 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">info</span>
+                      <span>最小手数の計算に時間がかかりすぎたため、時間ベースで評価しました</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    最小手数: {scoreBreakdown.minMoves}手 / 実際: {scoreBreakdown.actualMoves}手
+                    {scoreBreakdown.actualMoves > scoreBreakdown.minMoves && 
+                      ` (${scoreBreakdown.actualMoves - scoreBreakdown.minMoves}手超過)`}
+                  </>
+                )}
               </div>
               
               <div className="flex justify-between items-center text-sm sm:text-base">
@@ -1272,6 +1408,22 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
           >
             もう一度プレイ
           </button>
+        </div>
+      )}
+
+      {/* スナックバー通知 */}
+      {snackbar && (
+        <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 animate-slideUp ${
+          snackbar.type === 'error' ? 'bg-red-600' : 
+          snackbar.type === 'success' ? 'bg-green-600' : 
+          'bg-blue-600'
+        } text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 max-w-md`}>
+          <span className="material-symbols-outlined">
+            {snackbar.type === 'error' ? 'error' : 
+             snackbar.type === 'success' ? 'check_circle' : 
+             'info'}
+          </span>
+          <span>{snackbar.message}</span>
         </div>
       )}
     </div>
