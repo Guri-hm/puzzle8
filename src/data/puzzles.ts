@@ -65,6 +65,24 @@ export const PUZZLE_DATA: PuzzleData[] = [
     isSecret: true,
     bestTime: null
   },
+  { 
+    id: '3004',
+    name: 'かんたんパズル', 
+    description: '初心者向けの3×3パズル',
+    isAvailable: true,
+    isHidden: false,
+    isSecret: false,
+    bestTime: null
+  },
+  { 
+    id: '3005',
+    name: 'かんたんパズル', 
+    description: '初心者向けの3×3パズル',
+    isAvailable: true,
+    isHidden: false,
+    isSecret: true,
+    bestTime: null
+  },
   // 将来追加予定のパズル（利用不可）
   { 
     id: '6001',
