@@ -882,10 +882,10 @@ export default function PuzzleGame({ puzzleId, imagePaths, size, isSecret }: Puz
   const calculateScore = (minMoves: number, actualMoves: number, actualTime: number, hintsUsed: number): ScoreBreakdown => {
     const timeLimit = getTimeLimit(size)
     
-    // 手数スコア（60点満点）
-    // 最小手数なら60点、超過分は1手につき1点減点（最低0点）
+    // 手数スコア（70点満点）
+    // 最小手数なら70点、超過分は1手につき1点減点（最低0点）
     const moveExcess = Math.max(0, actualMoves - minMoves)
-    const moveScore = Math.max(0, 60 - moveExcess)
+    const moveScore = Math.max(0, 70 - moveExcess)
     
     // 時間スコア（30点満点）
     // 制限時間内なら30点、超過は10秒ごとに1点減点（最低0点）
